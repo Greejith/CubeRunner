@@ -22,30 +22,68 @@ public class PlayerController : MonoBehaviour
     private bool isSpinning = false;
     private float startRotationY;
 
-    public GhostManager ghostManager; 
+    private float lastZ;
+    private float accumulatedZ = 0f;
+    public float scoreDistanceStep = 1f;
+
+    public float speedIncreaseRate = 0.1f;
+    public float maxSpeed = 20f;
+
+
+    public bool isGameStarted = true;
+
+    public GhostManager ghostManager;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         originalScale = transform.localScale;
+        lastZ = transform.position.z;
     }
 
     void FixedUpdate()
     {
+        if (!isGameStarted) return;
+
+        forwardSpeed = Mathf.Min(forwardSpeed + speedIncreaseRate * Time.fixedDeltaTime, maxSpeed);
+
         rb.MovePosition(rb.position + Vector3.forward * forwardSpeed * Time.fixedDeltaTime);
+       
+
+        if (ghostManager != null)
+        {
+            MovementSnapshot snapshot = new MovementSnapshot(
+                transform.position,
+                transform.rotation,
+                transform.localScale
+            );
+
+            ghostManager.ReceiveSnapshot(snapshot);
+        }
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && isGround)
+        float deltaZ = transform.position.z - lastZ;
+        accumulatedZ += deltaZ;
+        lastZ = transform.position.z;
+
+        if (accumulatedZ >= scoreDistanceStep)
+        {
+            int steps = Mathf.FloorToInt(accumulatedZ / scoreDistanceStep);
+            UIManager.Instance?.AddScore(steps);
+            accumulatedZ -= steps * scoreDistanceStep;
+        }
+
+        if ((Input.GetKeyDown(KeyCode.Space) || IsMobileJumpPressed()) && isGround)
         {
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             isGround = false;
 
-            currentVelocity = new Vector3(-0.2f, 0.4f, -0.2f);
+            currentVelocity = new Vector3(-.2f, .4f, -.2f);
             isSpinning = true;
             spinTimer = 0f;
-            startRotationY = transform.eulerAngles.y;
+            startRotationY = .0f;
         }
 
         if (!isGround)
@@ -57,15 +95,11 @@ public class PlayerController : MonoBehaviour
         {
             ApplyGroundJelly();
         }
+    }
 
-        if (ghostManager != null)
-        {
-            ghostManager.ReceiveSnapshot(new MovementSnapshot(
-                transform.position,
-                transform.rotation,
-                transform.localScale
-            ));
-        }
+    bool IsMobileJumpPressed()
+    {
+        return Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
     }
 
     void ApplyJellyDeform()
@@ -104,6 +138,7 @@ public class PlayerController : MonoBehaviour
             isGround = true;
             isSpinning = false;
             spinTimer = 0f;
+            transform.rotation = Quaternion.Euler(0f, 0f, 0f);
         }
     }
 }
